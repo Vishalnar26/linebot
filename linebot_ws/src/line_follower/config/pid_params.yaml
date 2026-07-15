@@ -1,0 +1,32 @@
+# PID and motion parameters for line_follower_controller node
+# Load with: parameters=[pid_config] in the launch file
+#
+# Tuning guide
+# ─────────────
+# 1. Start with Kp=1.0, Ki=0.0, Kd=0.0 and base_speed=0.1 m/s
+# 2. Increase Kp until the robot oscillates on a straight line, then back off ~20%
+# 3. Add Kd (try 0.3–1.0) to dampen the oscillation
+# 4. Only add Ki if you see a persistent steady-state offset on curves; keep it small
+# 5. Raise base_speed gradually once PID is stable
+
+line_follower_controller:
+  ros__parameters:
+
+    # Proportional gain: primary correction force
+    # Higher = more aggressive steering response
+    kp: 1.0
+
+    # Integral gain: corrects persistent steady-state error
+    # Leave at 0.0 during initial tuning to avoid windup
+    ki: 0.0
+
+    # Derivative gain: dampens oscillation / overshoot
+    kd: 0.5
+
+    # Forward speed in m/s
+    # serial_bridge_node maps 0.2 m/s → PWM 255; start slow
+    base_speed: 0.1
+
+    # Maximum angular velocity in rad/s
+    # PID output (−1…+1) is scaled by this value
+    max_angular_speed: 2.0

@@ -1,0 +1,22 @@
+{
+  "project_name": "LineBot",
+  "author": "Vishal Narayanan",
+  "description": "A differential-drive robot that follows a black line on a white or non-black surface.",
+  "sensor_type": "3x single TCRT5000",
+  "sensor_count": "3",
+  "motor_driver": "L298N",
+  "motor_type": "DC gear motors 200 RPM",
+  "power_supply": "4x AA batteries",
+  "communication": "USB Serial",
+  "ros2_distro": "Jazzy",
+  "host_os": "Ubuntu (latest version)",
+  "workspace_name": "linebot_ws",
+  "package_name": "line_follower",
+  "topics": "/sensor_data, /cmd_vel, /line_error, /odm",
+  "arduino_library": "micro_ros_arduino or rosserial_arduino",
+  "control_algorithm": "PID",
+  "pid_params": "TBD",
+  "line_color": "Black line on white surface",
+  "speed": "0.2 m/s, 150 PWM units",
+  "extra_features": "ROS2 dashboard, logging,  intersection detection"
+}

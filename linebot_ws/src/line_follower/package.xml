@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"
+            schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>line_follower</name>
+  <version>0.1.0</version>
+  <description>
+    ROS2 Jazzy line follower for LineBot.
+    Provides a serial bridge node (Arduino Uno ↔ ROS2) and a host-side
+    PID controller node that follows a black line on a white surface.
+  </description>
+
+  <maintainer email="vishal@linebot.local">Vishal Narayanan</maintainer>
+  <license>MIT</license>
+
+  <!-- ROS2 runtime dependencies -->
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+
+  <!-- Python serial library (apt: python3-serial) -->
+  <exec_depend>python3-serial</exec_depend>
+
+  <!-- Launch system -->
+  <exec_depend>launch_ros</exec_depend>
+
+  <!-- Test dependencies -->
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
