@@ -25,7 +25,8 @@ line_follower_controller:
 
     # Forward speed in m/s
     # serial_bridge_node maps 0.2 m/s → PWM 255; start slow
-    base_speed: 0.1
+    # Lower this to make the robot drive slower (e.g., 0.05 m/s)
+    base_speed: 0.05
 
     # Maximum angular velocity in rad/s
     # PID output (−1…+1) is scaled by this value

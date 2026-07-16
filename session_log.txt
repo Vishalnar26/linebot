@@ -1,0 +1,153 @@
+LineBot Session — User Prompts Only — 2026-07-15
+=================================================
+
+1. I need to build a line follower Robot. It follows a black line. If it goes off the path & derails, it needs to be able to get back to the line.
+   [Hardware/software spec provided via image]
+   I want to implement ROS2 based code to perform the requirement.
+
+2. I'm buying these parts. Tell me how I could use them.
+   [Amazon order image: inline fuse holders, 470uF capacitors, LM2596 DC-DC buck converters]
+
+3. Start implementation
+
+4. I don't have the line_follower package on my ubuntu laptop
+
+5. what If I can manually create the package on the ubuntu laptop. Give me the instructions for that
+
+6. or what's a better way. I can still access firefox on my ubuntu laptop
+
+7. I'm getting an error:
+   zsh: no such file or directory: Vishalnar26
+   fatal: cannot exec '...askpass.sh': No such file or directory
+   Username for 'https://github.com':
+
+8. This command has an error when I enter:
+   git config --global --unset core.askpass
+
+9. ok I entered everything. Now what?
+
+10. step 5 didn't print anything
+
+11. this command outputs no such file or directory:
+    source ~/linebot/linebot_ws/install/setup.bash
+
+12. I ran colcon build --symlink-install and it built successfully before this command outputted no such file or directory:
+    source ~/linebot/linebot_ws/install/setup.bash
+
+13. when I type ls src/, I get an error: no such file or directory
+
+14. I can't find a folder with `src/`, `install/`, `build/`
+
+15. Getting error:
+    [serial-bridge-1] [RPTS Error] Calculated port number is too high. Probably the domainId is over 232 or portBase is too high
+
+16. [serial-bridge-1][FATAL] Cannot open serial port "/dev/ttyUSB0: [Errno 2]. No such file or directory
+
+17. Can you download only the prompts in this session to a file?
+
+18. I don't want the outputs. Only the questions or the prompts that the user asked
+
+
+## PROJECT
+Line follower robot: Arduino Uno + L298N + 3x TCRT5000 sensors
+ROS2 Jazzy on Ubuntu | Arduino IDE | USB serial bridge
+
+## NEW HARDWARE ORDERED
+- Inline fuse holders (1-2A on battery → L298N)
+- 470uF 25V capacitors (across L298N VM/GND + 5V rail)
+- LM2596 DC-DC buck converters (4xAA → 5V → Arduino + sensors, replaces 9V battery)
+
+## FILES CREATED (Mac: /Users/vishalnarayanan/Code/Robotics/)
+arduino/linebot/linebot.ino
+linebot_ws/src/line_follower/package.xml
+linebot_ws/src/line_follower/setup.py
+linebot_ws/src/line_follower/setup.cfg
+linebot_ws/src/line_follower/resource/line_follower
+linebot_ws/src/line_follower/line_follower/__init__.py
+linebot_ws/src/line_follower/line_follower/serial_bridge_node.py
+linebot_ws/src/line_follower/line_follower/line_follower_controller_node.py
+linebot_ws/src/line_follower/launch/line_follower.launch.py
+linebot_ws/src/line_follower/config/pid_params.yaml
+
+## ARCHITECTURE
+Arduino → "D:L,C,R|A:L,C,R\n" @ 20Hz → serial_bridge_node → /sensor_data
+line_follower_controller_node ← /sensor_data → PID → /cmd_vel → serial_bridge_node → "P:left_pwm,right_pwm\n" → Arduino → L298N
+
+## PIN MAPPING (Arduino Uno)
+LEFT_SENSOR_D=3, CENTER_SENSOR_D=4, RIGHT_SENSOR_D=2
+LEFT_SENSOR_A=A1, CENTER_SENSOR_A=A2, RIGHT_SENSOR_A=A0
+IN1=6, IN2=7, IN3=8, IN4=9, ENA=5, ENB=10
+Black=1 (LED off), White=0 (LED on)
+
+## MOTOR TRUTH TABLE
+Forward:   IN1=LOW,  IN2=HIGH, IN3=HIGH, IN4=LOW
+Backward:  IN1=HIGH, IN2=LOW,  IN3=LOW,  IN4=HIGH
+Turn CW:   IN1=HIGH, IN2=LOW,  IN3=HIGH, IN4=LOW
+Turn CCW:  IN1=LOW,  IN2=HIGH, IN3=LOW,  IN4=HIGH
+
+## GIT SETUP (Mac)
+cd /Users/vishalnarayanan/Code/Robotics
+git init
+git add .
+git commit -m "Initial LineBot ROS2 implementation"
+# Create repo at github.com/new
+git remote add origin git@github.com:<username>/linebot.git
+git branch -M main
+git push -u origin main
+
+# SSH key setup (to fix askpass.sh error):
+ssh-keygen -t ed25519 -C "your_email@example.com"
+cat ~/.ssh/id_ed25519.pub | pbcopy
+# Add key at github.com/settings/keys
+ssh -T git@github.com
+git remote set-url origin git@github.com:<username>/linebot.git
+
+## UBUNTU SETUP COMMANDS
+sudo apt update
+sudo apt install python3-serial ros-jazzy-launch-ros python3-colcon-common-extensions
+
+git clone https://github.com/<username>/linebot.git
+cd linebot/linebot_ws
+
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
+source install/setup.bash
+
+export ROS_DOMAIN_ID=0
+echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc  # make permanent
+
+ros2 pkg list | grep line_follower
+
+## LAUNCH
+ros2 launch line_follower line_follower.launch.py
+# or with custom port:
+ros2 launch line_follower line_follower.launch.py serial_port:=/dev/ttyACM0
+
+## SERIAL PORT (Ubuntu)
+ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null   # find Arduino port
+sudo usermod -aG dialout $USER              # fix permission (then re-login)
+dmesg -w | grep -E "tty|usb"               # watch for device on plug-in
+
+## MONITOR
+ros2 topic echo /sensor_data
+ros2 topic echo /cmd_vel
+rqt_plot /line_error/data
+rqt_graph
+
+## ERRORS RESOLVED
+1. askpass.sh broken path → used SSH keys instead
+2. git config --global --unset core.askpass exit code 5 → not set globally, normal
+3. [RPTS Error] domain ID too high → export ROS_DOMAIN_ID=0
+4. Cannot open serial port → Arduino not plugged in; use ttyACM0 for Uno
+
+## PID TUNING (config/pid_params.yaml)
+Start: kp=1.0, ki=0.0, kd=0.5, base_speed=0.1
+1. Increase kp until robot oscillates, then back off ~20%
+2. Add kd (0.3-1.0) to dampen oscillation
+3. Add ki only if persistent offset on curves; keep small
+4. Raise base_speed once PID is stable
+
+## UPDATE WORKFLOW (after making changes on Mac)
+git add . && git commit -m "update" && git push
+# On Ubuntu:
+git pull && cd linebot_ws && colcon build --symlink-install
