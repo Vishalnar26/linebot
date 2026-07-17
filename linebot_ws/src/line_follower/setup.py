@@ -40,6 +40,7 @@ setup(
         'console_scripts': [
             'serial_bridge = line_follower.serial_bridge_node:main',
             'line_follower_controller = line_follower.line_follower_controller_node:main',
+            'linebot_manager = line_follower.linebot_manager_node:main',
         ],
     },
 )
