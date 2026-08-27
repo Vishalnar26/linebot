@@ -21,6 +21,7 @@ setup(
             os.path.join('share', package_name, 'launch'),
             glob('launch/*.launch.py'),
         ),
+        # telemetry-only launch file is included by the glob above
         # config files
         (
             os.path.join('share', package_name, 'config'),

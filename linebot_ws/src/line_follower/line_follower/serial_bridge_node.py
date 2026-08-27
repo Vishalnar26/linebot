@@ -3,24 +3,39 @@
 serial_bridge_node — ROS2 Jazzy
 Bridges the Arduino Uno and ROS2 over USB serial.
 
-Serial protocol
----------------
-Arduino → PC  (every 50 ms):   D:L,C,R|A:L,C,R\\n
-  L/C/R digital: 0 = white (LED on)  |  1 = black (LED off)
-  L/C/R analog:  0–1023
-  Order: Left, Center, Right
+Serial protocols (auto-detected)
+--------------------------------
+1. Host-side PID firmware [linebot.ino]:
+   Arduino → PC  (every 50 ms):   D:L,C,R|A:L,C,R\\n
+     L/C/R digital: 0 = white (LED on)  |  1 = black (LED off)
+     L/C/R analog:  0–1023
+     Order: Left, Center, Right
 
-PC → Arduino  (on /cmd_vel):   P:left_pwm,right_pwm\\n
-  Signed integers  −255 … +255
-  Positive = forward, negative = backward
+   PC → Arduino  (on /cmd_vel):   P:left_pwm,right_pwm\\n
+
+2. Onboard PID firmware [linebot_onboard.ino]:
+   Arduino → PC  (every ~150 ms):  A_Raw:L,C,R E:err P:p D:d PWM:left,right\\n
+     L/C/R analog: 0–1023
+     err: line error in [-1, +1]
+     p/d: proportional/derivative PID contributions (PWM units)
+     left/right: current motor PWM values
+
+   In this mode the Arduino ignores P: commands (PID runs onboard).
 
 ROS2 interfaces
 ---------------
   Published :  /sensor_data  (std_msgs/Int32MultiArray)
-               data = [left_dig, center_dig, right_dig,
-                       left_ana, center_ana, right_ana]
+                 host PID mode: [left_dig, center_dig, right_dig,
+                                 left_ana, center_ana, right_ana]
+                 onboard mode:  [left_ana, center_ana, right_ana]
+               /line_error   (std_msgs/Float32)      — line position error
+               /pid_terms    (std_msgs/Float32MultiArray)
+                 host PID mode: computed by controller node
+                 onboard mode:  [p_term, 0.0, d_term] from telemetry
+               /motor_pwm    (std_msgs/Int32MultiArray)
+                 onboard mode only: [left_pwm, right_pwm]
 
-  Subscribed:  /cmd_vel      (geometry_msgs/Twist)
+  Subscribed:  /cmd_vel      (geometry_msgs/Twist)  — used only by host-PID mode
                linear.x  → base speed   (0 … MAX_SPEED m/s → 0 … 255 PWM)
                angular.z → differential (−MAX_ANGULAR … +MAX_ANGULAR rad/s)
 
@@ -34,7 +49,7 @@ import threading
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import Int32MultiArray, Float32, Float32MultiArray
 from geometry_msgs.msg import Twist
 
 try:
@@ -76,15 +91,27 @@ class SerialBridgeNode(Node):
             self.get_logger().fatal(f'Cannot open serial port "{port}": {exc}')
             raise
 
-        # ── Publisher: sensor data ────────────────────────────────────────────
+        # ── Publishers ────────────────────────────────────────────────────────
         self._sensor_pub = self.create_publisher(
             Int32MultiArray, '/sensor_data', 10
+        )
+        self._line_error_pub = self.create_publisher(
+            Float32, '/line_error', 10
+        )
+        self._pid_terms_pub = self.create_publisher(
+            Float32MultiArray, '/pid_terms', 10
+        )
+        self._motor_pwm_pub = self.create_publisher(
+            Int32MultiArray, '/motor_pwm', 10
         )
 
         # ── Subscriber: velocity commands ─────────────────────────────────────
         self._cmd_vel_sub = self.create_subscription(
             Twist, '/cmd_vel', self._cmd_vel_callback, 10
         )
+
+        # Protocol auto-detection state
+        self._protocol_onboard = None  # None = unknown, True = onboard PID mode
 
         # ── Background serial-reader thread ───────────────────────────────────
         self._read_thread = threading.Thread(
@@ -112,27 +139,73 @@ class SerialBridgeNode(Node):
     # ── Sensor line parser ────────────────────────────────────────────────────
     def _parse_and_publish(self, line: str) -> None:
         """
-        Parse  D:L,C,R|A:L,C,R  and publish to /sensor_data.
-        Example: D:0,1,0|A:320,850,290
+        Auto-detect and parse either:
+          D:L,C,R|A:L,C,R        (host-PID firmware)
+          A_Raw:L,C,R E:err P:p D:d PWM:left,right  (onboard PID firmware)
         """
         try:
-            if not line.startswith('D:') or '|' not in line:
-                return
-
-            d_part, a_part = line.split('|', 1)
-            d_vals = [int(v) for v in d_part[2:].split(',')]   # skip "D:"
-            a_vals = [int(v) for v in a_part[2:].split(',')]   # skip "A:"
-
-            if len(d_vals) != 3 or len(a_vals) != 3:
-                return
-
-            msg = Int32MultiArray()
-            # [left_dig, center_dig, right_dig, left_ana, center_ana, right_ana]
-            msg.data = d_vals + a_vals
-            self._sensor_pub.publish(msg)
-
+            if line.startswith('A_Raw:'):
+                self._protocol_onboard = True
+                self._parse_onboard(line)
+            elif line.startswith('D:') and '|' in line:
+                self._protocol_onboard = False
+                self._parse_host_pid(line)
+            else:
+                self.get_logger().debug(f'Unrecognised line ignored: "{line}"')
         except (ValueError, IndexError):
             self.get_logger().debug(f'Malformed sensor line ignored: "{line}"')
+
+    def _parse_host_pid(self, line: str) -> None:
+        """Parse D:L,C,R|A:L,C,R and publish /sensor_data."""
+        d_part, a_part = line.split('|', 1)
+        d_vals = [int(v) for v in d_part[2:].split(',')]   # skip "D:"
+        a_vals = [int(v) for v in a_part[2:].split(',')]   # skip "A:"
+
+        if len(d_vals) != 3 or len(a_vals) != 3:
+            return
+
+        msg = Int32MultiArray()
+        # [left_dig, center_dig, right_dig, left_ana, center_ana, right_ana]
+        msg.data = d_vals + a_vals
+        self._sensor_pub.publish(msg)
+
+    def _parse_onboard(self, line: str) -> None:
+        """
+        Parse A_Raw:L,C,R E:err P:p D:d PWM:left,right
+        and publish sensor_data, line_error, pid_terms, motor_pwm.
+        """
+        # line example: A_Raw:469,513,142 E:-0.291 P:-44 D:-6 PWM:50,150
+        parts = line.split()
+        data = {}
+        for part in parts:
+            if ':' in part:
+                key, value = part.split(':', 1)
+                data[key] = value
+
+        a_vals = [int(v) for v in data['A_Raw'].split(',')]
+        error = float(data['E'])
+        p_term = float(data['P'])
+        d_term = float(data['D'])
+        pwm_vals = [int(v) for v in data['PWM'].split(',')]
+
+        if len(a_vals) != 3 or len(pwm_vals) != 2:
+            return
+
+        sensor_msg = Int32MultiArray()
+        sensor_msg.data = a_vals
+        self._sensor_pub.publish(sensor_msg)
+
+        error_msg = Float32()
+        error_msg.data = error
+        self._line_error_pub.publish(error_msg)
+
+        pid_msg = Float32MultiArray()
+        pid_msg.data = [p_term, 0.0, d_term]
+        self._pid_terms_pub.publish(pid_msg)
+
+        pwm_msg = Int32MultiArray()
+        pwm_msg.data = pwm_vals
+        self._motor_pwm_pub.publish(pwm_msg)
 
     # ── /cmd_vel → serial PWM command ────────────────────────────────────────
     def _cmd_vel_callback(self, msg: Twist) -> None:
