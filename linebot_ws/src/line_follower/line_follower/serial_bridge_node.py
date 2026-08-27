@@ -134,7 +134,11 @@ class SerialBridgeNode(Node):
                     self._parse_and_publish(line)
             except serial.SerialException as exc:
                 self.get_logger().error(f'Serial read error: {exc}')
-                break
+                # Do not kill the node; wait and retry so transient USB
+                # disconnects can recover without restarting the launch.
+                import time
+                time.sleep(0.5)
+                continue
 
     # ── Sensor line parser ────────────────────────────────────────────────────
     def _parse_and_publish(self, line: str) -> None:
@@ -145,15 +149,21 @@ class SerialBridgeNode(Node):
         """
         try:
             if line.startswith('A_Raw:'):
-                self._protocol_onboard = True
+                if self._protocol_onboard is not True:
+                    self._protocol_onboard = True
+                    self.get_logger().info('Detected onboard-PID telemetry protocol')
                 self._parse_onboard(line)
             elif line.startswith('D:') and '|' in line:
-                self._protocol_onboard = False
+                if self._protocol_onboard is not False:
+                    self._protocol_onboard = False
+                    self.get_logger().info('Detected host-PID telemetry protocol')
                 self._parse_host_pid(line)
             else:
                 self.get_logger().debug(f'Unrecognised line ignored: "{line}"')
-        except (ValueError, IndexError):
-            self.get_logger().debug(f'Malformed sensor line ignored: "{line}"')
+        except (ValueError, IndexError, KeyError) as exc:
+            self.get_logger().debug(
+                f'Malformed sensor line ignored: "{line}" ({exc})'
+            )
 
     def _parse_host_pid(self, line: str) -> None:
         """Parse D:L,C,R|A:L,C,R and publish /sensor_data."""
