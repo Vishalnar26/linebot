@@ -36,7 +36,7 @@ import time
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32, Bool, Int32MultiArray
+from std_msgs.msg import Float32, Bool, Int32MultiArray, Float32MultiArray
 from geometry_msgs.msg import Twist
 
 
@@ -68,6 +68,10 @@ class PIDController:
         self._integral   = 0.0
         self._prev_error = 0.0
         self._last_time: float | None = None
+        # Expose last-term values for telemetry (p, i, d)
+        self.last_p = 0.0
+        self.last_i = 0.0
+        self.last_d = 0.0
 
     def reset(self) -> None:
         self._integral   = 0.0
@@ -85,7 +89,12 @@ class PIDController:
 
         dt = now - self._last_time
         if dt <= 0.0:
-            return self.kp * error
+            # No time elapsed — treat as proportional-only
+            p_term = self.kp * error
+            self.last_p = p_term
+            self.last_i = 0.0
+            self.last_d = 0.0
+            return p_term
 
         # Proportional term
         p_term = self.kp * error
@@ -100,6 +109,11 @@ class PIDController:
 
         # Derivative term
         d_term = self.kd * (error - self._prev_error) / dt
+
+        # Store last values for telemetry
+        self.last_p = p_term
+        self.last_i = i_term
+        self.last_d = d_term
 
         self._prev_error = error
         self._last_time  = now
@@ -135,6 +149,13 @@ class LineFollowerControllerNode(Node):
         self._cmd_vel_pub      = self.create_publisher(Twist,   '/cmd_vel',      10)
         self._line_error_pub   = self.create_publisher(Float32, '/line_error',   10)
         self._intersection_pub = self.create_publisher(Bool,    '/intersection', 10)
+        # PID telemetry: [p_term, i_term, d_term, pid_output]
+        self._pid_debug_pub = self.create_publisher(Float32MultiArray, '/pid_debug', 10)
+        # Also expose individual PID terms for plotting/inspection
+        self._pid_p_pub = self.create_publisher(Float32, '/pid_p', 10)
+        self._pid_i_pub = self.create_publisher(Float32, '/pid_i', 10)
+        self._pid_d_pub = self.create_publisher(Float32, '/pid_d', 10)
+        self._pid_output_pub = self.create_publisher(Float32, '/pid_output', 10)
 
         # ── Subscriber ────────────────────────────────────────────────────────
         self._sensor_sub = self.create_subscription(
@@ -183,6 +204,29 @@ class LineFollowerControllerNode(Node):
 
         # ── PID computation ───────────────────────────────────────────────────
         pid_output = _clamp(self._pid.update(error), -1.0, 1.0)
+
+        # Publish PID debug telemetry for observation and logging
+        pid_msg = Float32MultiArray()
+        pid_msg.data = [
+            float(self._pid.last_p),
+            float(self._pid.last_i),
+            float(self._pid.last_d),
+            float(pid_output),
+        ]
+        self._pid_debug_pub.publish(pid_msg)
+        # Publish individual Float32 topics for easy plotting
+        p_pub = Float32()
+        i_pub = Float32()
+        d_pub = Float32()
+        out_pub = Float32()
+        p_pub.data = float(self._pid.last_p)
+        i_pub.data = float(self._pid.last_i)
+        d_pub.data = float(self._pid.last_d)
+        out_pub.data = float(pid_output)
+        self._pid_p_pub.publish(p_pub)
+        self._pid_i_pub.publish(i_pub)
+        self._pid_d_pub.publish(d_pub)
+        self._pid_output_pub.publish(out_pub)
 
         # ── Publish /line_error ───────────────────────────────────────────────
         err_msg = Float32()

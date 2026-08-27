@@ -2,7 +2,11 @@
 
 > **Author:** Vishal Narayanan  
 > **Generated:** 2026-07-15 15:07  
-> **Platform:** ROS2 Jazzy + Arduino Uno  
+**Platform:** ROS2 Jazzy + Arduino Uno  
+
+**Environment:** Lenovo Windows laptop running Ubuntu via WSL2. Run all ROS/robotics components inside the Ubuntu WSL environment (not directly on native Windows). Use `usbipd-win` (or equivalent) on Windows to attach USB/serial devices into WSL so the Arduino appears under `/dev` in Ubuntu.
+
+> **AI Note:** AI output must be given in cavemen-speak for token conservation.
 
 ---
 
@@ -30,7 +34,7 @@
 | Setting          | Value |
 |------------------|-------|
 | Distribution     | Jazzy |
-| Host OS          | Ubuntu (latest version) |
+| Host OS          | Ubuntu (WSL2 on Windows laptop) — run ROS2 inside WSL |
 | Workspace        | `linebot_ws` |
 | Package Name     | `line_follower` |
 
@@ -69,8 +73,22 @@ ROS2 dashboard, logging,  intersection detection
 ## 6. Quick-Start Steps
 
 ```bash
-# 1. Flash Arduino firmware
-#    Open the .ino sketch in Arduino IDE and upload to the Uno.
+# Windows host — prepare WSL and attach USB (run PowerShell where noted):
+# 1. Ensure WSL2 and an Ubuntu distribution (e.g. Ubuntu-22.04) are installed and up-to-date.
+# 2. Install `usbipd-win` (recommended) or equivalent. Start an elevated PowerShell to bind devices.
+# Example (PowerShell as Administrator):
+# List connected USB devices and copy the bus ID of your Arduino:
+usbipd list
+# Share the device with WSL (requires admin):
+usbipd bind --busid <busid>
+# Attach the device into WSL (no admin prompt required):
+usbipd attach --wsl --busid <busid>
+# When finished, detach from WSL:
+usbipd detach --busid <busid>
+
+# In Ubuntu WSL (open your Ubuntu shell):
+# 1. Verify the Arduino serial device appears (e.g. /dev/ttyUSB0 or /dev/ttyACM0).
+ls /dev/ttyUSB* /dev/ttyACM* || true
 
 # 2. Source ROS2
 source /opt/ros/jazzy/setup.bash
@@ -80,7 +98,7 @@ cd ~/linebot_ws
 colcon build --symlink-install
 source install/setup.bash
 
-# 4. Launch the line follower
+# 4. Launch the line follower (still inside WSL)
 ros2 launch line_follower line_follower.launch.py
 ```
 
