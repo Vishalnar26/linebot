@@ -14,3 +14,5 @@ usbipd detach --busid <busid>          # detach when finished
 ```
 
 See Microsoft's guidance: https://learn.microsoft.com/windows/wsl/connect-usb for details and troubleshooting.
+
+I was here!
