@@ -82,8 +82,15 @@ class SerialBridgeNode(Node):
         baud_rate = self.get_parameter('baud_rate').get_parameter_value().integer_value
 
         # ── Serial connection ─────────────────────────────────────────────────
+        # dsrdtr=False / rtscts=False keeps DTR/RTS de-asserted so the Arduino
+        # does not reset when the port is opened.  This is critical when the
+        # device is passed through usbipd-win, because the reset can cause the
+        # virtual USB device to re-enumerate or drop off the bus.
         try:
-            self._serial = serial.Serial(port, baud_rate, timeout=1.0)
+            self._serial = serial.Serial(
+                port, baud_rate, timeout=1.0,
+                dsrdtr=False, rtscts=False
+            )
             self.get_logger().info(
                 f'Serial port opened: {port} @ {baud_rate} baud'
             )
