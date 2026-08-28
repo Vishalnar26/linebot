@@ -5,18 +5,20 @@ A line-following robot controlled by an Arduino Uno and observed through ROS2 Ja
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Hardware Requirements](#hardware-requirements)
-3. [Software Requirements](#software-requirements)
-4. [Wiring / Assembly](#wiring--assembly)
-5. [Windows Setup](#windows-setup)
-6. [WSL2 Setup](#wsl2-setup)
-7. [Clone the Repository](#clone-the-repository)
-8. [Upload Arduino Firmware](#upload-arduino-firmware)
-9. [Pass USB Through to WSL2](#pass-usb-through-to-wsl2)
-10. [Build the ROS2 Workspace](#build-the-ros2-workspace)
-11. [Run the Robot](#run-the-robot)
-12. [View Telemetry](#view-telemetry)
-13. [Troubleshooting](#troubleshooting)
+2. [Prerequisites](#prerequisites)
+3. [Hardware Requirements](#hardware-requirements)
+4. [Software Requirements](#software-requirements)
+5. [Wiring / Assembly](#wiring--assembly)
+6. [Windows Setup](#windows-setup)
+7. [WSL2 Setup](#wsl2-setup)
+8. [Clone the Repository](#clone-the-repository)
+9. [Upload Arduino Firmware](#upload-arduino-firmware)
+10. [Pass USB Through to WSL2](#pass-usb-through-to-wsl2)
+11. [Build the ROS2 Workspace](#build-the-ros2-workspace)
+12. [Step-by-Step Execution Process](#step-by-step-execution-process)
+13. [Run the Robot](#run-the-robot)
+14. [View Telemetry](#view-telemetry)
+15. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -33,6 +35,23 @@ Two ROS2 launch modes are provided:
 
 - `telemetry_only.launch.py` — Arduino runs PID onboard; ROS2 only listens.
 - `line_follower.launch.py` — ROS2 runs PID and sends motor commands to Arduino.
+
+## Prerequisites
+
+Before starting, make sure every component below is available and its dependencies are installed.
+
+| Component | Purpose | Required dependencies |
+|-----------|---------|----------------------|
+| Robot electronics | Arduino Uno + L298N + 2 DC motors + 3 TCRT5000 sensors + battery | Correct wiring (see [Wiring / Assembly](#wiring--assembly)) |
+| Windows laptop | Host OS for WSL2 and Arduino IDE | Windows 10/11, WSL2 enabled, Administrator access |
+| Arduino IDE / CLI | Compile and upload firmware | Arduino IDE, USB cable, Arduino drivers |
+| `usbipd-win` | Pass USB devices into WSL2 | Installed via `winget`, PowerShell as Administrator |
+| WSL2 Ubuntu | Runtime environment for ROS2 | Ubuntu 22.04 or 24.04 distro |
+| ROS2 Jazzy | Robotics middleware | Installed inside WSL2 per the official guide |
+| `linebot_ws` | ROS2 workspace containing nodes and launch files | Git, `colcon`, `python3-serial` |
+| Serial bridge node | Reads Arduino telemetry and publishes ROS2 topics | `pyserial`, readable `/dev/ttyACM*` port |
+
+All dependency installations must be complete before you run the execution steps below.
 
 ## Hardware Requirements
 
@@ -226,6 +245,112 @@ source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install
 source install/setup.bash
 ```
+
+## Step-by-Step Execution Process
+
+Follow this exact order on a fresh system or after a full restart.
+
+### 1. Prepare the hardware
+
+- Wire the motors, L298N, sensors, and battery as described in [Wiring / Assembly](#wiring--assembly).
+- Connect the Arduino Uno to the Windows laptop with a USB cable.
+
+### 2. Prepare Windows
+
+- Install the [Arduino IDE](https://www.arduino.cc/en/software).
+- Install `usbipd-win`:
+  ```powershell
+  winget install usbipd
+  ```
+- Reboot if prompted.
+- Verify WSL2 is installed:
+  ```powershell
+  wsl --version
+  ```
+
+### 3. Prepare WSL2
+
+- Install ROS2 Jazzy inside WSL2.
+- Install required packages:
+  ```bash
+  sudo apt update
+  sudo apt install -y python3-pip python3-serial git
+  ```
+- Add yourself to the `dialout` group:
+  ```bash
+  sudo usermod -a -G dialout $USER
+  ```
+  Then restart WSL or log out and back in.
+
+### 4. Clone the repository
+
+- Windows editing copy:
+  ```powershell
+  cd C:\
+  git clone https://github.com/Vishalnar26/linebot.git
+  ```
+- WSL runtime copy:
+  ```bash
+  cd ~
+  git clone https://github.com/Vishalnar26/linebot.git
+  ```
+
+### 5. Upload the Arduino firmware
+
+- Open Arduino IDE on Windows.
+- Select the correct COM port.
+- Open `arduino/linebot/linebot_onboard.ino` (telemetry only) or `arduino/linebot/linebot.ino` (host PID).
+- Click **Upload**.
+- Open the Serial Monitor at `115200` baud and confirm telemetry lines appear.
+
+### 6. Pass the Arduino USB device into WSL2
+
+- PowerShell as Administrator:
+  ```powershell
+  usbipd list
+  usbipd bind --busid 2-3
+  usbipd attach --wsl --busid 2-3 --auto-attach
+  ```
+- In WSL:
+  ```bash
+  ls /dev/ttyACM* /dev/ttyUSB*
+  sudo chmod 666 /dev/ttyACM0
+  stty -F /dev/ttyACM0 -hupcl
+  cat /dev/ttyACM0
+  ```
+  Press `Ctrl+C` after confirming telemetry output.
+
+### 7. Build the ROS2 workspace
+
+```bash
+cd ~/linebot/linebot_ws
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
+source install/setup.bash
+```
+
+### 8. Launch the robot
+
+- Onboard PID / telemetry only:
+  ```bash
+  ros2 launch line_follower telemetry_only.launch.py serial_port:=/dev/ttyACM0
+  ```
+- Host PID / ROS2-controlled:
+  ```bash
+  ros2 launch line_follower line_follower.launch.py serial_port:=/dev/ttyACM0
+  ```
+
+### 9. View telemetry
+
+- In a second WSL terminal:
+  ```bash
+  source /opt/ros/jazzy/setup.bash
+  source ~/linebot/linebot_ws/install/setup.bash
+  ros2 topic echo /sensor_data
+  ```
+- Repeat for `/line_error`, `/pid_terms`, `/motor_pwm` as needed.
+
+If any step fails, see [Troubleshooting](#troubleshooting) before continuing.
 
 ## Run the Robot
 
