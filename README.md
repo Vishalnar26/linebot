@@ -8,17 +8,18 @@ A line-following robot controlled by an Arduino Uno and observed through ROS2 Ja
 2. [Prerequisites](#prerequisites)
 3. [Hardware Requirements](#hardware-requirements)
 4. [Software Requirements](#software-requirements)
-5. [Wiring / Assembly](#wiring--assembly)
-6. [Windows Setup](#windows-setup)
-7. [WSL2 Setup](#wsl2-setup)
-8. [Clone the Repository](#clone-the-repository)
-9. [Upload Arduino Firmware](#upload-arduino-firmware)
-10. [Pass USB Through to WSL2](#pass-usb-through-to-wsl2)
-11. [Build the ROS2 Workspace](#build-the-ros2-workspace)
-12. [Step-by-Step Execution Process](#step-by-step-execution-process)
-13. [Run the Robot](#run-the-robot)
-14. [View Telemetry](#view-telemetry)
-15. [Troubleshooting](#troubleshooting)
+5. [Diagrams](#diagrams)
+6. [Wiring / Assembly](#wiring--assembly)
+7. [Windows Setup](#windows-setup)
+8. [WSL2 Setup](#wsl2-setup)
+9. [Clone the Repository](#clone-the-repository)
+10. [Upload Arduino Firmware](#upload-arduino-firmware)
+11. [Pass USB Through to WSL2](#pass-usb-through-to-wsl2)
+12. [Build the ROS2 Workspace](#build-the-ros2-workspace)
+13. [Step-by-Step Execution Process](#step-by-step-execution-process)
+14. [Run the Robot](#run-the-robot)
+15. [View Telemetry](#view-telemetry)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -83,6 +84,102 @@ All dependency installations must be complete before you run the execution steps
   ```bash
   sudo apt install python3-serial
   ```
+
+## Diagrams
+
+### High-level architecture
+
+```mermaid
+flowchart LR
+    subgraph Robot
+        A[Arduino Uno]
+        S[3× TCRT5000 sensors]
+        M[2× DC motors]
+        L[L298N driver]
+    end
+
+    subgraph Windows
+        IDE[Arduino IDE]
+        U[usbipd-win]
+    end
+
+    subgraph WSL2_Ubuntu
+        ROS[ROS2 Jazzy]
+        SBN[serial_bridge_node]
+    end
+
+    S -->|Analog signals| A
+    A -->|PWM commands| L
+    L -->|Power| M
+    IDE -->|Upload firmware| A
+    A -->|USB serial| U
+    U -->|USB passthrough| SBN
+    SBN -->|Publish topics| ROS
+```
+
+### Telemetry-only mode data flow
+
+```mermaid
+flowchart LR
+    A[Arduino Uno
+       linebot_onboard.ino]
+    S[Serial port
+       /dev/ttyACM0]
+    B[serial_bridge_node]
+    SD[/sensor_data]
+    LE[/line_error]
+    PT[/pid_terms]
+    MP[/motor_pwm]
+
+    A -->|A_Raw:... E:... P:... D:... PWM:...| S
+    S -->|readline| B
+    B --> SD
+    B --> LE
+    B --> PT
+    B --> MP
+```
+
+### Host-PID mode data flow
+
+```mermaid
+flowchart LR
+    A[Arduino Uno
+       linebot.ino]
+    S[Serial port
+       /dev/ttyACM0]
+    B[serial_bridge_node]
+    C[line_follower_controller_node]
+    Cmd[/cmd_vel]
+    SD[/sensor_data]
+    LE[/line_error]
+    PT[/pid_terms]
+
+    A -->|D:L,C,R|A:L,C,R| S
+    S -->|readline| B
+    B --> SD
+    B --> LE
+    C -->|Compute PID| PT
+    C -->|Twist| Cmd
+    Cmd -->|P:left,right| B
+    B -->|write| S
+    S -->|PWM command| A
+```
+
+### End-to-end process flow
+
+```mermaid
+flowchart TD
+    Start([Start]) --> HW[Assemble hardware]
+    HW --> Win[Install Windows tools<br/>Arduino IDE + usbipd-win]
+    Win --> WSL[Install WSL2 + ROS2 Jazzy]
+    WSL --> Clone[Clone repository]
+    Clone --> FW[Upload Arduino firmware]
+    FW --> USB[Attach USB device to WSL2]
+    USB --> Build[Build ROS2 workspace]
+    Build --> Launch[Launch ROS2 nodes]
+    Launch --> View[View telemetry topics]
+    View --> Done([Done])
+```
 
 ## Wiring / Assembly
 
