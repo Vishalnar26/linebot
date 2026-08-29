@@ -18,17 +18,20 @@
 
 ## 2. Hardware Configuration
 
-| Component            | Details                  |
-|----------------------|--------------------------|
-| Line Sensor Type     | 3x single TCRT5000       |
-| Sensor Channels      | 3                        |
-| Motor Driver         | L298N                    |
-| Motors               | DC gear motors 200 RPM   |
-| Power Supply         | 4x AA batteries          |
-| Voltage Regulator    | Buck converter           |
-| Power Protection     | Inline fuse              |
-| Decoupling Capacitor | 470 µF                   |
-| Arduino ↔ ROS2       | USB Serial               |
+| Component            | Details                         |
+|----------------------|---------------------------------|
+| Chassis              | Acrylic                         |
+| Wheels               | 2x medium wheels (motor-mounted)|
+| Caster Wheel         | 1x rear caster                  |
+| Line Sensor Type     | 3x single TCRT5000              |
+| Sensor Channels      | 3                               |
+| Motor Driver         | L298N                           |
+| Motors               | DC gear motors 200 RPM          |
+| Power Supply         | 4x AA batteries                 |
+| Voltage Regulator    | Buck converter                  |
+| Power Protection     | Inline fuse                     |
+| Decoupling Capacitor | 470 µF                          |
+| Arduino ↔ ROS2       | USB Serial                      |
 
 ---
 
